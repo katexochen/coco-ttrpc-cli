@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -21,15 +22,22 @@ func main() {
 }
 
 func handle() error {
-	system := os.Args[1]
+	socket := flag.String("socket", "example-ttrpc-server", "socket path")
+	flag.Parse()
+	system := flag.Arg(0)
+	role := flag.Arg(1)
+	fmt.Printf("system: %s, role: %s, socket: %s\n", system, role, *socket)
+
+	if flag.NArg() < 2 {
+		return errors.New("invalid args. usage: <system> <role> [method] [payload]")
+	}
 	switch system {
 	case "attestation-agent":
-		role := os.Args[2]
 		switch role {
 		case "server":
-			return startAttestationAgentServer()
+			return startAttestationAgentServer(*socket)
 		case "client":
-			return attestationAgentClient()
+			return attestationAgentClient(*socket)
 		default:
 			return errors.New("invalid role")
 		}
@@ -38,9 +46,7 @@ func handle() error {
 	}
 }
 
-const socket = "example-ttrpc-server"
-
-func startAttestationAgentServer() error {
+func startAttestationAgentServer(socket string) error {
 	s, err := ttrpc.NewServer(ttrpc.WithServerHandshaker(ttrpc.UnixSocketRequireSameUser()))
 	if err != nil {
 		return err
@@ -60,7 +66,7 @@ func startAttestationAgentServer() error {
 	return s.Serve(context.Background(), l)
 }
 
-func attestationAgentClient() error {
+func attestationAgentClient(socket string) error {
 	conn, err := net.Dial("unix", socket)
 	if err != nil {
 		return err
@@ -71,8 +77,8 @@ func attestationAgentClient() error {
 	getresourceClient := attestation_agent.NewGetResourceServiceClient(tc)
 	keyproviderClient := attestation_agent.NewKeyProviderServiceClient(tc)
 
-	method := os.Args[3]
-	payload := os.Args[4]
+	method := flag.Arg(2)
+	payload := flag.Arg(3)
 	switch method {
 	case "GetResource":
 		r := &attestation_agent.GetResourceRequest{}
@@ -104,9 +110,9 @@ func attestationAgentClient() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(resp)
+	default:
+		return errors.New("invalid method")
 	}
-
-	return nil
 }
 
 type attestationAgentServer struct{}
